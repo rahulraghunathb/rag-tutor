@@ -11,13 +11,13 @@ from typing import List, Optional, Dict
 from urllib.parse import quote_plus
 
 import aiohttp
+import httpx
 import chromadb
 from chromadb.config import Settings
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-from ollama import Client
 import json
 import re
 
@@ -26,7 +26,8 @@ import re
 PERSIST_DIR = Path("chroma_db")
 COLLECTION_NAME = "networking_context"
 EMBED_MODEL_NAME = "sentence-transformers/msmarco-distilbert-base-v4"
-OLLAMA_MODEL = None
+LLM_MODEL = None
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 QUIZ_TOP_K = 12
 MIN_QUESTIONS = 1
 MAX_QUESTIONS = 10
@@ -112,7 +113,6 @@ class QuizCheckResponse(BaseModel):
 # Global instances
 _model: Optional[SentenceTransformer] = None
 _collection: Optional[chromadb.Collection] = None
-_ollama_client: Optional[Client] = None
 _quiz_cache: Dict[str, Dict[str, any]] = {}
 
 
@@ -124,34 +124,82 @@ def _load_model() -> SentenceTransformer:
     return _model
 
 
-def _get_ollama_model() -> str:
-    global OLLAMA_MODEL
-    if OLLAMA_MODEL is None:
+def _get_llm_model() -> str:
+    global LLM_MODEL
+    if LLM_MODEL is None:
         load_dotenv()
-        OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:1b")
-    return OLLAMA_MODEL
+        LLM_MODEL = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
+    return LLM_MODEL
 
 
-def _check_ollama_health() -> bool:
-    """Check if Ollama is running and the model is available."""
+def _get_api_key() -> str:
+    load_dotenv()
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY not found in environment")
+    return api_key
+
+
+def _check_llm_health() -> bool:
+    """Check if OpenRouter API key is available."""
+    load_dotenv()
+    return bool(os.getenv("OPENROUTER_API_KEY"))
+
+
+def _call_openrouter(messages: List[dict], max_tokens: int = 1000, temperature: float = 0.7) -> str:
+    """Helper to call OpenRouter API synchronously."""
+    api_key = _get_api_key()
+    model_name = _get_llm_model()
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    
+    payload = {
+        "model": model_name,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    
     try:
-        client = _load_ollama_client()
-        model_name = _get_ollama_model()
-        client.show(model_name)
-        return True
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(OPENROUTER_API_URL, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        global _ollama_client
-        _ollama_client = None
-        return False
+        print(f"OpenRouter API call failed: {e}")
+        raise HTTPException(status_code=503, detail=f"LLM service error: {e}")
 
 
-def _load_ollama_client() -> Client:
-    global _ollama_client
-    if _ollama_client is None:
-        load_dotenv()
-        host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        _ollama_client = Client(host=host)
-    return _ollama_client
+async def _call_openrouter_async(messages: List[dict], max_tokens: int = 1000, temperature: float = 0.7) -> str:
+    """Helper to call OpenRouter API asynchronously."""
+    api_key = _get_api_key()
+    model_name = _get_llm_model()
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    
+    payload = {
+        "model": model_name,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(OPENROUTER_API_URL, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"OpenRouter API call failed: {e}")
+        raise HTTPException(status_code=503, detail=f"LLM service error: {e}")
 
 
 def _load_collection() -> chromadb.Collection:
@@ -241,24 +289,15 @@ async def _search_web(query: str, max_results: int = 3) -> List[WebCitation]:
 
 
 def _llm_generate_question(context_text: str, question_type: str, topic: str) -> Dict[str, any]:
-    """Use Ollama to generate intelligent quiz questions based on context."""
+    """Use OpenRouter to generate intelligent quiz questions based on context."""
     print(f"Generating question using LLM for topic: {topic}, type: {question_type}")
-    if not _check_ollama_health():
-        raise HTTPException(status_code=503, detail="Ollama service is not available. Please ensure Ollama is running and the model is loaded.")
-    
-    client = _load_ollama_client()
-    model_name = _get_ollama_model()
+    if not _check_llm_health():
+        raise HTTPException(status_code=503, detail="LLM service is not configured.")
     
     prompt = _get_prompt_for_type(question_type, topic, context_text)
     
     try:
-        response = client.chat(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.7, "num_predict": 500}
-        )
-        
-        result_text = response["message"]["content"].strip()
+        result_text = _call_openrouter([{"role": "user", "content": prompt}], max_tokens=1000, temperature=0.7)
         
         json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
         if json_match:
@@ -366,13 +405,10 @@ def _select_context_subset(contexts: List[ContextItem]) -> List[ContextItem]:
     size = max(4, min(len(contexts), random.randint(5, 10)))
     return random.sample(contexts, k=size) if len(contexts) > size else contexts
 
-def _llm_grade_open_ended_answer(question: str, user_answer: str, correct_answer: str, context: str) -> tuple[bool, str, float]:
-    """Use Ollama to intelligently grade open-ended answers."""
-    if not _check_ollama_health():
+async def _llm_grade_open_ended_answer(question: str, user_answer: str, correct_answer: str, context: str) -> tuple[bool, str, float]:
+    """Use OpenRouter to intelligently grade open-ended answers."""
+    if not _check_llm_health():
         return False, 'F', 0.0
-    
-    client = _load_ollama_client()
-    model_name = _get_ollama_model()
     
     prompt = f"""You are an expert networking professor grading an open-ended answer. CRITICAL: Perform comprehensive analysis including vector database semantic comparison.
 
@@ -441,13 +477,7 @@ Provide only ONE grade (A, B, C, D, or F). Focus on semantic meaning from vector
 CRITICAL: For open-ended networking questions, require SPECIFIC technical details and explanations. Generic, vague, or superficial answers that lack technical depth must receive Grade F, regardless of any partial correctness. The answer must demonstrate actual understanding of networking concepts, not just common sense statements."""
 
     try:
-        response = client.chat(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.3, "num_predict": 400}
-        )
-        
-        result_text = response["message"]["content"].strip()
+        result_text = await _call_openrouter_async([{"role": "user", "content": prompt}], max_tokens=1000, temperature=0.3)
         
         json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
         if json_match:
@@ -470,7 +500,7 @@ CRITICAL: For open-ended networking questions, require SPECIFIC technical detail
         return False, 'C', 0.0
 
 
-def _grade_answer(user_answer: str, correct_answer: str, question_type: str, question: str = "", context: str = "") -> tuple[bool, str, float]:
+async def _grade_answer(user_answer: str, correct_answer: str, question_type: str, question: str = "", context: str = "") -> tuple[bool, str, float]:
     """Grade answers using LLM for open-ended questions, exact match for others."""
     if not user_answer or not user_answer.strip():
         return False, 'F', 0.0
@@ -483,7 +513,7 @@ def _grade_answer(user_answer: str, correct_answer: str, question_type: str, que
             return False, 'F', 0.0
     else:  # open_ended
         # Use LLM-powered grading for all open-ended answers (no pre-validation)
-        return _llm_grade_open_ended_answer(question, user_answer, correct_answer, context)
+        return await _llm_grade_open_ended_answer(question, user_answer, correct_answer, context)
 
 
 def _get_prompt_for_type(question_type: str, topic: str, context_text: str) -> str:
@@ -732,7 +762,7 @@ async def check_quiz_answer(question_id: str, user_answer: str) -> QuizCheckResp
             context_text = cached_data.get("context", "")
 
         # Grade the answer using LLM with retrieved context
-        is_correct, grade, confidence = _grade_answer(
+        is_correct, grade, confidence = await _grade_answer(
             user_answer,
             correct_answer,
             question_type,

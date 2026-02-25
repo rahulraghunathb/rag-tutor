@@ -19,7 +19,7 @@ from api_qa import (
     ask_question,
     _load_model,
     _load_collection,
-    _check_ollama_health
+    _check_llm_health
 )
 
 # Import Quiz module
@@ -33,11 +33,11 @@ from api_quiz import (
     get_hardcoded_topics
 )
 
-# Check Ollama status at startup
-ollama_status = _check_ollama_health()
+# Check LLM status at startup
+llm_status = _check_llm_health()
 print(f"Starting Networking RAG System...")
-print(f"Loading Ollama model === {os.getenv('OLLAMA_MODEL')}")
-print(f"Ollama Model Status: {'RUNNING' if ollama_status else 'NOT AVAILABLE'}")
+print(f"Loading OpenRouter model === {os.getenv('LLM_MODEL', 'arcee-ai/trinity-large-preview:free')}")
+print(f"LLM Status (OpenRouter): {'RUNNING' if llm_status else 'NOT CONFIGURED'}")
 print(f"Vector Database: LOADED")
 print(f"Server will start on http://127.0.0.1:8000")
 print("=" * 50)
@@ -62,10 +62,10 @@ def health():
     try:
         _load_model()
         _load_collection()
-        ollama_ok = _check_ollama_health()
+        llm_ok = _check_llm_health()
         return {
-            "status": "ok" if ollama_ok else "warning", 
-            "ollama": "ok" if ollama_ok else "not available",
+            "status": "ok" if llm_ok else "warning", 
+            "llm": "ok" if llm_ok else "not configured",
             "embedding_model": "ok",
             "vector_db": "ok"
         }
