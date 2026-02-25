@@ -1,209 +1,132 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Networking Q&A</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <title>Networking Agent</title>
+    <link rel="stylesheet" href="/static/styles.css?v=2" />
   </head>
   <body>
+    <!-- ── Header ── -->
     <div class="header">
-      <div class="dot"></div>
-      <h1>Networking Agent</h1>
+      <div class="header-brand">
+        <div class="dot"></div>
+        <h1><span>Net</span>work Agent</h1>
+      </div>
       <div class="spacer"></div>
-      <select id="mode-select" class="mode-select">
-        <option value="qa">Q&A Mode</option>
-        <option value="quiz">Quiz Mode</option>
+      <select id="mode-select" class="mode-select" title="Switch mode">
+        <option value="qa">💬 Q&amp;A Mode</option>
+        <option value="quiz">⚡ Quiz Mode</option>
       </select>
-      <button
-        id="new-chat"
-        class="btn icon"
-        title="New chat"
-        aria-label="New chat"
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            d="M12 5v14M5 12h14"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          />
+      <button id="new-chat" class="btn icon" title="New chat" aria-label="New chat">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
         </svg>
       </button>
     </div>
+
+    <!-- ── Main Container ── -->
     <div class="container">
+
+      <!-- ── Example Prompts ── -->
       <div id="examples" class="examples">
-        <h3>Try these examples:</h3>
+        <h3>✦ Quick Start</h3>
         <div class="example-buttons">
-          <button
-            class="example-btn"
-            data-question="What is a DDoS attack and how can it be mitigated?"
-          >
-            DDoS Attacks
-          </button>
-          <button
-            class="example-btn"
-            data-question="Explain the TCP/IP protocol stack in detail."
-          >
-            TCP/IP Stack
-          </button>
-          <button
-            class="example-btn"
-            data-question="What are the key differences between IPv4 and IPv6?"
-          >
-            IPv4 vs IPv6
-          </button>
-          <button
-            class="example-btn"
-            data-question="How does encryption work in network security?"
-          >
-            Encryption
-          </button>
-          <button
-            class="example-btn"
-            data-question="Describe the OSI model layers and their functions."
-          >
-            OSI Model
-          </button>
-          <button
-            class="example-btn"
-            data-question="What is the role of firewalls in network protection?"
-          >
-            Firewalls
-          </button>
-          <button
-            class="example-btn"
-            data-question="Explain how VPNs ensure secure communication."
-          >
-            VPNs
-          </button>
-          <button
-            class="example-btn"
-            data-question="What are common vulnerabilities in wireless networks?"
-          >
-            Wireless Security
-          </button>
+          <button class="example-btn" data-question="What is a DDoS attack and how can it be mitigated?">DDoS Attacks</button>
+          <button class="example-btn" data-question="Explain the TCP/IP protocol stack in detail.">TCP/IP Stack</button>
+          <button class="example-btn" data-question="What are the key differences between IPv4 and IPv6?">IPv4 vs IPv6</button>
+          <button class="example-btn" data-question="How does encryption work in network security?">Encryption</button>
+          <button class="example-btn" data-question="Describe the OSI model layers and their functions.">OSI Model</button>
+          <button class="example-btn" data-question="What is the role of firewalls in network protection?">Firewalls</button>
+          <button class="example-btn" data-question="Explain how VPNs ensure secure communication.">VPNs</button>
+          <button class="example-btn" data-question="What are common vulnerabilities in wireless networks?">Wireless Security</button>
         </div>
       </div>
+
+      <!-- ── Chat View ── -->
       <div id="chat-container" class="chat-container">
         <div id="chat" class="chat"></div>
       </div>
+
+      <!-- ── Quiz View ── -->
       <div id="quiz-container" class="quiz-container hidden">
         <div class="quiz-header">
           <h3>Quiz Mode</h3>
-          
-          <!-- Question Generation Type Toggle -->
+
           <div class="quiz-section">
-            <label class="quiz-label">Question Generation Type:</label>
+            <label class="quiz-label">Generation Type</label>
             <div class="toggle-group">
               <label class="toggle-option">
-                <input
-                  type="radio"
-                  name="generation-type"
-                  value="random"
-                  checked
-                />
-                <span>Random Questions</span>
+                <input type="radio" name="generation-type" value="random" checked />
+                <span>🎲 Random Questions</span>
               </label>
               <label class="toggle-option">
                 <input type="radio" name="generation-type" value="topic" />
-                <span>Topic-Specific Questions</span>
+                <span>🎯 Topic-Specific</span>
               </label>
             </div>
           </div>
 
-          <!-- Topic Selection (hidden by default) -->
-          <div class="quiz-section" id="topic-section" style="display: none">
-            <label class="quiz-label" for="quiz-topic">Enter Topic:</label>
+          <div class="quiz-section" id="topic-section" style="display:none">
+            <label class="quiz-label" for="quiz-topic">Topic</label>
             <input
               id="quiz-topic"
               class="quiz-input"
               type="text"
-              placeholder="Type a custom topic or select from below..."
+              placeholder="Type a topic or pick one below…"
             />
             <div class="topic-buttons" id="topic-buttons">
-              <div class="topic-buttons-label">Quick select:</div>
+              <div class="topic-buttons-label">Quick select</div>
             </div>
           </div>
 
-          <!-- Question Type Selection -->
           <div class="quiz-section">
-            <label class="quiz-label" for="quiz-type">Question Type:</label>
+            <label class="quiz-label" for="quiz-type">Question Type</label>
             <select id="quiz-type" class="quiz-select">
-              <option value="random">Random (Mixed Types)</option>
-              <option value="multiple_choice">Multiple Choice Only</option>
-              <option value="true_false">True/False Only</option>
-              <option value="open_ended">Open-Ended Only</option>
+              <option value="random">Mixed Types</option>
+              <option value="multiple_choice">Multiple Choice</option>
+              <option value="true_false">True / False</option>
+              <option value="open_ended">Open-Ended</option>
             </select>
           </div>
 
-          <!-- Number of Questions -->
           <div class="quiz-section">
-            <label class="quiz-label" for="quiz-count"
-              >Number of Questions:</label
-            >
-            <input
-              id="quiz-count"
-              class="quiz-input"
-              type="number"
-              min="1"
-              max="10"
-              value="3"
-            />
+            <label class="quiz-label" for="quiz-count">Number of Questions</label>
+            <input id="quiz-count" class="quiz-input" type="number" min="1" max="10" value="3" />
           </div>
 
-          <div style="text-align: center; margin-top: 0.5rem">
-            <button
-              id="generate-quiz"
-              class="btn"
-              style="
-                padding: 4px 8px;
-                font-size: 0.8rem;
-                min-width: 80px;
-                max-width: 450px;
-                border-radius: 16px;
-                width: auto;
-              "
-            >
-              <span class="btn-text">Generate Questions</span>
-              <div class="btn-loading hidden" style="display: inline-flex; align-items: center; gap: 6px;">
-                <div class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></div>
-                <span>Generating quiz...</span>
-              </div>
-            </button>
-          </div>
+          <button id="generate-quiz" class="btn">
+            <span class="btn-text">⚡ Generate Questions</span>
+            <div class="btn-loading hidden" style="display:inline-flex;align-items:center;gap:6px;">
+              <div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>
+              <span>Generating…</span>
+            </div>
+          </button>
         </div>
+
         <div id="quiz-questions" class="quiz-questions"></div>
         <div id="quiz-feedback" class="quiz-feedback hidden"></div>
       </div>
+
+      <!-- ── Footer Input ── -->
       <div class="footer">
         <div class="input-wrap">
           <input
             id="prompt"
             class="prompt"
-            placeholder="Ask about networking or security..."
+            placeholder="Ask anything about networking or security…"
+            autocomplete="off"
           />
           <button id="send" class="send" title="Send" aria-label="Send">
             <span>Send</span>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M3 11l18-8-8 18-2-7-8-3z" fill="currentColor" />
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 11l18-8-8 18-2-7-8-3z" fill="currentColor"/>
             </svg>
           </button>
         </div>
         <div id="meta" class="meta"></div>
       </div>
+
     </div>
     <script src="/static/main.js"></script>
   </body>
